@@ -39,24 +39,27 @@ def exponent_data_function_generator(dataset, order, batches_to_increase,
                                      increase_amount, starting_percent,
                                      batch_size=100):
 
-    size_data = dataset.x_train.shape[0]
+    size_data = dataset.x_train.shape[0]#样本数量 N
     
-    cur_percent = 1
+    cur_percent = 1#初始倍率是1
     cur_data_x = dataset.x_train
     cur_data_y = dataset.y_test_labels
     
     
     def data_function(x, y, batch, history, model):
         nonlocal cur_percent, cur_data_x, cur_data_y
+        #nonlocal 关键字的作用是：在函数内部修改外部函数的变量。因为我们需要在 data_function 内部修改 cur_percent、cur_data_x 和 cur_data_y 的值，所以需要声明它们为 nonlocal。
         
-        if batch % batches_to_increase == 0:
+        if batch % batches_to_increase == 0:#每隔 batches_to_increase 个 batch，增加我们训练时用到的数据量，增加的方式是指数级的，直到用到全部数据为止
             if batch == 0:
-                percent = starting_percent
+                percent = starting_percent#第一次增加时，直接把数据量增加到 starting_percent（默认是 100/2500，即 100 张图），之后每次增加 increase_amount 倍，直到达到 100%（全部数据）为止
             else:
-                percent = min(cur_percent*increase_amount, 1)
+                percent = min(cur_percent*increase_amount, 1)#每次增加 increase_amount =1.9倍，直到达到 100%（全部数据）
             if percent != cur_percent:
                 cur_percent = percent
                 data_limit = np.int(np.ceil(size_data * percent))
+                #ceil 向上取整，保证至少增加一个样本。比如当 size_data=2500，percent=100/2500=0.04 时，data_limit=100；当 percent=0.041 时，data_limit=102.5=103
+                #影响不大，ceil 取整的目的主要是为了保证每次增加至少一个样本，否则当 percent 增加但 data_limit 没有增加时，训练数据就没有增加，达不到 curriculum learning 的效果了
                 new_data = order[:data_limit]
                 cur_data_x = dataset.x_train[new_data, :, :, :]
                 cur_data_y = dataset.y_train_labels[new_data, :]               
@@ -132,10 +135,11 @@ def load_model():
 
 def load_order(order_name, dataset):
     classic_networks = ["vgg16", "vgg19", "inception", "xception", "resnet"]
-    if order_name in classic_networks:
+    if order_name in classic_networks:#如果你选的是这些模型，就走 transfer learning 路线
         network_name = order_name
         if not transfer_learning.svm_scores_exists(dataset,
-                                                   network_name=network_name):
+                                                   network_name=network_name):   #判断：👉 是否已经算过 difficulty（缓存）
+            #提取特征  倒数第二层 → feature vector
             if order_name == "inception":
                 (transfer_values_train, transfer_values_test) = transfer_learning.get_transfer_values_inception(dataset)
     
@@ -144,12 +148,14 @@ def load_order(order_name, dataset):
                                                                                                                        network_name)
         else:
             (transfer_values_train, transfer_values_test) = (None, None)
-
+        #Step 3：用 SVM 计算 difficulty（核心！！！）
         train_scores, test_scores = transfer_learning.get_svm_scores(transfer_values_train, dataset.y_train,
                                                                      transfer_values_test, dataset.y_test, dataset,
                                                                      network_name=network_name)
         order = transfer_learning.rank_data_according_to_score(train_scores, dataset.y_train)
-        
+        #不直接用teacher model 的 loss 来衡量 difficulty，而是用 SVM 预测的“正确类别概率”来衡量 difficulty，score高 → easy;score低 → hard
+        #因为inception是在ImageNet上训练的，和cifar100不完全一样，所以用 SVM （inception提取的cifar特征训练的）来衡量 difficulty 更合理一些
+        #inception输出类别数量，种类和cifar100不一样；其次就是输入图片的尺寸也不一样，cifar100是32*32，inception是299*299
     else:
         print("do not support order: %s" % args.order)
         raise ValueError
@@ -214,9 +220,10 @@ def graph_from_history(history, plot_train=False, plot_test=True):
     plt.legend()
 #    axs.legend(loc="best")
 
+#主函数
 def run_expriment(args):
     dataset = load_dataset(args.dataset)
-    model_lib = load_model()
+    model_lib = load_model()#加载模型结构（cifar100_model.Cifar100_Model()）
 
     size_train = dataset.x_train.shape[0]
     num_batches = (args.num_epochs * size_train) // args.batch_size
@@ -224,10 +231,12 @@ def run_expriment(args):
     lr_scheduler = exponent_decay_lr_generator(args.lr_decay_rate,
                                                args.minimal_lr,
                                                args.lr_batch_size)
+    #构建学习率调度器（指数衰减）:每隔 lr_batch_size 个 batch，学习率就除以 lr_decay_rate，直到达到 minimal_lr 为止;
     order = load_order(args.order, dataset)
 
-    order = balance_order(order, dataset)    
-    
+    order = balance_order(order, dataset)    ###!!!!!!!!
+    #平衡顺序：把每个类别的样本都分成若干组，每组包含每个类别的下一个最简单的样本，然后把这些组按照难度顺序排列，构成新的顺序。这样做的目的是为了避免在训练初期过于偏向某些类别，从而提高模型的泛化能力。
+    #根据 curriculum 选择 normal / curriculum / anti / random
     if args.curriculum == "anti":
         order = np.flip(order, 0)
     elif args.curriculum == "random":

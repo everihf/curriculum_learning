@@ -110,17 +110,17 @@ def get_transfer_values_classic_networks(dataset, network_name):
 
 
 def transfer_values_svm_scores(train_x, train_y, test_x, test_y):
-    clf = svm.SVC(probability=True)
+    clf = svm.SVC(probability=True)#Step 1：训练 SVM
     print("fitting svm")
     clf.fit(train_x, train_y)
     if len(test_x) != 0:
         print("evaluating svm")
-        test_scores = clf.predict_proba(test_x)
-        print('accuracy for svm = ', str(np.mean(np.argmax(test_scores, axis=1) == test_y)))
+        test_scores = clf.predict_proba(test_x)#Step 2：测试集预测
+        print('accuracy for svm = ', str(np.mean(np.argmax(test_scores, axis=1) == test_y)))#打印测试准确率
     else:
         test_scores = []
-    train_scores = clf.predict_proba(train_x)
-    return train_scores, test_scores
+    train_scores = clf.predict_proba(train_x)#Step 3：训练集预测（关键）
+    return train_scores, test_scores#用 SVM 计算：每个样本属于各个类别的概率，这个概率值可以用来衡量样本的 difficulty
 
 def svm_scores_exists(dataset, network_name="inception",
                       alternative_data_dir="."):
@@ -160,12 +160,12 @@ def get_svm_scores(transfer_values_train, y_train, transfer_values_test,
     return train_scores, test_scores
 
 
-def rank_data_according_to_score(train_scores, y_train, reverse=False, random=False):
-    train_size, _ = train_scores.shape
-    hardness_score = train_scores[list(range(train_size)), y_train]
-    res = np.asarray(sorted(range(len(hardness_score)), key=lambda k: hardness_score[k], reverse=True))
-    if reverse:
+def rank_data_according_to_score(train_scores, y_train, reverse=False, random=False):#train_scores:[N,C] 是 SVM 预测的每个样本属于各个类别的概率值，y_train 是样本的真实标签
+    train_size, _ = train_scores.shape#train_size 是样本数量 N，_ 是类别数量
+    hardness_score = train_scores[list(range(train_size)), y_train]#Step 1：取“正确类别概率”（关键！！！）,difficulty ≈ 该样本被正确分类的概率
+    res = np.asarray(sorted(range(len(hardness_score)), key=lambda k: hardness_score[k], reverse=True))#难度降序排序，score高 → easy;score低 → hard
+    if reverse:#anti-curriculum（先学难的）
         res = np.flip(res, 0)
-    if random:
+    if random:#random baseline 随机排序
         np.random.shuffle(res)
     return res

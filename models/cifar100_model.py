@@ -28,6 +28,7 @@ class Cifar100_Model(ModelLib.ModelLib):
 
         # input image dimensions
         h, w, d = 32, 32, 3
+        #CIFAR-100 数据集中的图像大小为 32x32 像素，且每个像素有 3 个颜色通道（红、绿、蓝），因此输入层的形状为 (32, 32, 3)。如果使用 channels_first 的数据格式，则输入层的形状为 (3, 32, 32)。
 
         if K.image_data_format() == 'channels_first':
             input_shape = (d, h, w)
