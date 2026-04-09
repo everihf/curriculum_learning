@@ -10,6 +10,32 @@ import numpy as np
 import keras.backend as K
 import time
 
+
+def _set_optimizer_learning_rate(optimizer, learning_rate):
+    """Set optimizer lr across Keras / tf.keras API versions."""
+    lr_attr = None
+    if hasattr(optimizer, "learning_rate"):
+        lr_attr = optimizer.learning_rate
+    elif hasattr(optimizer, "lr"):
+        lr_attr = optimizer.lr
+    else:
+        raise AttributeError("Optimizer has neither 'learning_rate' nor 'lr' attribute.")
+
+    if hasattr(lr_attr, "assign"):
+        lr_attr.assign(learning_rate)
+        return
+
+    # Older APIs exposed backend helpers for Variable-like objects.
+    if hasattr(K, "set_value"):
+        K.set_value(lr_attr, learning_rate)
+        return
+
+    # Fall back to direct attribute assignment for plain numeric values.
+    if hasattr(optimizer, "learning_rate"):
+        optimizer.learning_rate = learning_rate
+    elif hasattr(optimizer, "lr"):
+        optimizer.lr = learning_rate
+
 def compile_model(model, initial_lr=1e-3, loss='categorical_crossentropy',
                   optimizer='adam', metrics=['accuracy'], momentum=0.0):
     if optimizer == 'adam':
@@ -58,7 +84,7 @@ def train_model_batches(model, dataset, num_batches, batch_size=100,
     for batch in range(num_batches):
         cur_x, cur_y = data_function(x_train, y_train, batch, history, model)
         cur_lr = lr_scheduler(initial_lr, batch, history)
-        K.set_value(model.optimizer.lr, cur_lr)
+        _set_optimizer_learning_rate(model.optimizer, cur_lr)
         batch_x, batch_y = batch_generator(cur_x, cur_y, batch_size)
         cur_loss, cur_accuracy = model.train_on_batch(batch_x, batch_y)
         history["loss"].append(cur_loss)
