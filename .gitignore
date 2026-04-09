@@ -58,3 +58,11 @@ target/
 
 *.gz
 data/cifar100/cifar-100-python/
+
+data/inception/
+*.pb
+*.tgz
+*.jpg
+
+*.pkl
+data/
