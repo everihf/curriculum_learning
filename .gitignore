@@ -64,6 +64,6 @@ data/inception/
 *.tgz
 *.jpg
 
+# data
+data/
 *.pkl
-/data/
-#data/cifar100/
