@@ -58,9 +58,8 @@ import numpy as np
 import tensorflow as tf
 
 # The original tutorial code targets TensorFlow 1.x APIs.
-# Enable TF1 compatibility so legacy symbols like Session, GraphDef and gfile
-# keep working when running on TensorFlow 2.x.
-tf.compat.v1.disable_eager_execution()
+# Use TF1 compatibility symbols (Session, GraphDef, gfile) while
+# keeping eager execution enabled for modern Keras training code.
 tf = tf.compat.v1
 
 import download
