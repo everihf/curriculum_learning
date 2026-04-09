@@ -17,6 +17,18 @@ import numpy as np
 import pickle
 import classic_nets_imagenet
 
+
+def _is_valid_feature_matrix(values):
+    if values is None:
+        return False
+    arr = np.asarray(values)
+    if arr.ndim != 2:
+        return False
+    if arr.shape[0] == 0 or arr.shape[1] == 0:
+        return False
+    return np.isfinite(arr).all()
+
+
 # download the models / datasets
 def get_transfer_values_inception(dataset):
     data_dir = r'./data/'
@@ -59,6 +71,13 @@ def get_transfer_values_inception(dataset):
     transfer_values_train = transfer_values_cache(cache_path=file_path_cache_train,
                                                   images=images_train,
                                                   model=model)
+    if not _is_valid_feature_matrix(transfer_values_train):
+        print("invalid cached inception train transfer values, recomputing cache")
+        if os.path.exists(file_path_cache_train):
+            os.remove(file_path_cache_train)
+        transfer_values_train = transfer_values_cache(cache_path=file_path_cache_train,
+                                                      images=images_train,
+                                                      model=model)
     
     print("Transfering test set")
     
@@ -67,6 +86,13 @@ def get_transfer_values_inception(dataset):
     transfer_values_test = transfer_values_cache(cache_path=file_path_cache_test,
                                                   images=images_test,
                                                   model=model)
+    if not _is_valid_feature_matrix(transfer_values_test):
+        print("invalid cached inception test transfer values, recomputing cache")
+        if os.path.exists(file_path_cache_test):
+            os.remove(file_path_cache_test)
+        transfer_values_test = transfer_values_cache(cache_path=file_path_cache_test,
+                                                      images=images_test,
+                                                      model=model)
     return transfer_values_train, transfer_values_test
 
 
@@ -90,6 +116,11 @@ def get_transfer_values_classic_networks(dataset, network_name):
         print("training set already exist on disk")
         with open(file_path_cache_train, "rb") as pick_file:
             transfer_values_train = pickle.load(pick_file)
+        if not _is_valid_feature_matrix(transfer_values_train):
+            print("invalid cached train transfer values, recomputing cache")
+            transfer_values_train = classic_nets_imagenet.classify_img(dataset.x_train, network_name)
+            with open(file_path_cache_train, "wb") as pick_file:
+                pickle.dump(transfer_values_train, pick_file)
     else:
         transfer_values_train = classic_nets_imagenet.classify_img(dataset.x_train, network_name)
         with open(file_path_cache_train, "wb") as pick_file:
@@ -101,6 +132,11 @@ def get_transfer_values_classic_networks(dataset, network_name):
         print("test set already exist on disk")
         with open(file_path_cache_test, "rb") as pick_file:
             transfer_values_test = pickle.load(pick_file)
+        if not _is_valid_feature_matrix(transfer_values_test):
+            print("invalid cached test transfer values, recomputing cache")
+            transfer_values_test = classic_nets_imagenet.classify_img(dataset.x_test, network_name)
+            with open(file_path_cache_test, "wb") as pick_file:
+                pickle.dump(transfer_values_test, pick_file)
     else:
         transfer_values_test = classic_nets_imagenet.classify_img(dataset.x_test, network_name)
         with open(file_path_cache_test, "wb") as pick_file:
@@ -110,6 +146,16 @@ def get_transfer_values_classic_networks(dataset, network_name):
 
 
 def transfer_values_svm_scores(train_x, train_y, test_x, test_y):
+    if not _is_valid_feature_matrix(train_x):
+        raise ValueError(
+            "SVM train features are invalid. Expected a finite 2D feature matrix, "
+            "but got {}.".format(np.asarray(train_x))
+        )
+    if len(test_x) != 0 and not _is_valid_feature_matrix(test_x):
+        raise ValueError(
+            "SVM test features are invalid. Expected a finite 2D feature matrix, "
+            "but got {}.".format(np.asarray(test_x))
+        )
     clf = svm.SVC(probability=True)#Step 1：训练 SVM
     print("fitting svm")
     clf.fit(train_x, train_y)
@@ -175,6 +221,19 @@ def get_svm_scores(transfer_values_train, y_train, transfer_values_test,
         )
 
     if should_compute_scores:
+        if not _is_valid_feature_matrix(transfer_values_train):
+            if dataset is None:
+                raise ValueError(
+                    "Missing/invalid transfer values for SVM training and no dataset was "
+                    "provided to recompute them."
+                )
+            print("transfer values missing or invalid, recomputing transfer features")
+            if network_name == "inception":
+                transfer_values_train, transfer_values_test = get_transfer_values_inception(dataset)
+            else:
+                transfer_values_train, transfer_values_test = get_transfer_values_classic_networks(
+                    dataset, network_name
+                )
         train_scores, test_scores = transfer_values_svm_scores(transfer_values_train, y_train, transfer_values_test, y_test)
         with open(svm_train_path, 'wb') as file_pi:
             pickle.dump(train_scores, file_pi)
