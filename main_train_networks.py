@@ -57,7 +57,7 @@ def exponent_data_function_generator(dataset, order, batches_to_increase,
                 percent = min(cur_percent*increase_amount, 1)#每次增加 increase_amount =1.9倍，直到达到 100%（全部数据）
             if percent != cur_percent:
                 cur_percent = percent
-                data_limit = np.int(np.ceil(size_data * percent))
+                data_limit = int(np.ceil(size_data * percent))
                 #ceil 向上取整，保证至少增加一个样本。比如当 size_data=2500，percent=100/2500=0.04 时，data_limit=100；当 percent=0.041 时，data_limit=102.5=103
                 #影响不大，ceil 取整的目的主要是为了保证每次增加至少一个样本，否则当 percent 增加但 data_limit 没有增加时，训练数据就没有增加，达不到 curriculum learning 的效果了
                 new_data = order[:data_limit]

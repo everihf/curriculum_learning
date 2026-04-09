@@ -65,4 +65,5 @@ data/inception/
 *.jpg
 
 *.pkl
-data/
+/data/
+#data/cifar100/
