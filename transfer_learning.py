@@ -133,6 +133,17 @@ def svm_scores_exists(dataset, network_name="inception",
     svm_test_path = os.path.join(data_dir, network_name + 'svm_test_values.pkl')
     return os.path.exists(svm_train_path) and os.path.exists(svm_test_path)
 
+
+def _cached_scores_match_dataset(train_scores, y_train, test_scores, y_test):
+    y_train = np.asarray(y_train).reshape(-1)
+    y_test = np.asarray(y_test).reshape(-1)
+    test_size_match = len(test_scores) == 0 or test_scores.shape[0] == y_test.shape[0]
+    return (
+        train_scores.shape[0] == y_train.shape[0] and
+        test_size_match
+    )
+
+
 def get_svm_scores(transfer_values_train, y_train, transfer_values_test,
                    y_test, dataset, network_name="inception",
                    alternative_data_dir="."):
@@ -144,24 +155,43 @@ def get_svm_scores(transfer_values_train, y_train, transfer_values_test,
     
     svm_train_path = os.path.join(data_dir, network_name + 'svm_train_values.pkl')
     svm_test_path = os.path.join(data_dir, network_name + 'svm_test_values.pkl')
-    if not os.path.exists(svm_train_path) or not os.path.exists(svm_test_path):
+    should_compute_scores = (
+        not os.path.exists(svm_train_path) or
+        not os.path.exists(svm_test_path)
+    )
+
+    if not should_compute_scores:
+        with open(svm_train_path, 'rb') as file_pi:
+            train_scores = pickle.load(file_pi)
+
+        with open(svm_test_path, 'rb') as file_pi:
+            test_scores = pickle.load(file_pi)
+
+        should_compute_scores = not _cached_scores_match_dataset(
+            train_scores=train_scores,
+            y_train=y_train,
+            test_scores=test_scores,
+            y_test=y_test
+        )
+
+    if should_compute_scores:
         train_scores, test_scores = transfer_values_svm_scores(transfer_values_train, y_train, transfer_values_test, y_test)
         with open(svm_train_path, 'wb') as file_pi:
             pickle.dump(train_scores, file_pi)
 
         with open(svm_test_path, 'wb') as file_pi:
             pickle.dump(test_scores, file_pi)
-    else:
-        with open(svm_train_path, 'rb') as file_pi:
-            train_scores = pickle.load(file_pi)
-
-        with open(svm_test_path, 'rb') as file_pi:
-            test_scores = pickle.load(file_pi)
     return train_scores, test_scores
 
 
 def rank_data_according_to_score(train_scores, y_train, reverse=False, random=False):#train_scores:[N,C] 是 SVM 预测的每个样本属于各个类别的概率值，y_train 是样本的真实标签
+    y_train = np.asarray(y_train).reshape(-1)
     train_size, _ = train_scores.shape#train_size 是样本数量 N，_ 是类别数量
+    if train_size != y_train.shape[0]:
+        raise ValueError(
+            "train_scores and y_train must have the same number of samples, "
+            "got {} and {}".format(train_size, y_train.shape[0])
+        )
     hardness_score = train_scores[list(range(train_size)), y_train]#Step 1：取“正确类别概率”（关键！！！）,difficulty ≈ 该样本被正确分类的概率
     res = np.asarray(sorted(range(len(hardness_score)), key=lambda k: hardness_score[k], reverse=True))#难度降序排序，score高 → easy;score低 → hard
     if reverse:#anti-curriculum（先学难的）
