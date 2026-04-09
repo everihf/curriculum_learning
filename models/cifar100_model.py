@@ -7,7 +7,7 @@ Created on Wed Jan 31 15:03:40 2018
 """
 
 from keras import backend as K, regularizers
-from keras.engine.training import Model
+from keras import Model
 from keras.layers import Conv2D, MaxPooling2D, Dropout, Flatten, Dense, \
     BatchNormalization, Activation, Input
 import ModelLib

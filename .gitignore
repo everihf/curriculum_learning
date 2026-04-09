@@ -55,3 +55,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+*.gz
+data/cifar100/cifar-100-python/
